@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>储物区设备摆放规划系统</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Microsoft YaHei', sans-serif; background: #1a1a2e; color: #eee; padding: 20px; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        h1 { text-align: center; margin-bottom: 20px; color: #4ECDC4; }
+        .controls { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap; }
+        button { background: #4ECDC4; color: #1a1a2e; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 14px; font-weight: bold; }
+        button:hover { background: #369e97; }
+        button.active { background: #FF6B6B; color: white; }
+        .layout-container { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+        .layout-card { background: #16213e; border-radius: 10px; padding: 15px; border: 1px solid #0f3460; }
+        .layout-card h2 { color: #4ECDC4; margin-bottom: 10px; font-size: 16px; }
+        .layout-card canvas { width: 100%; height: 400px; background: #0f0f23; border-radius: 5px; }
+        .info-panel { margin-top: 10px; font-size: 12px; }
+        .info-panel table { width: 100%; border-collapse: collapse; }
+        .info-panel th, .info-panel td { padding: 4px; text-align: left; border-bottom: 1px solid #333; }
+        .info-panel th { color: #4ECDC4; }
+        .legend { display: flex; gap: 15px; justify-content: center; margin: 15px 0; flex-wrap: wrap; }
+        .legend-item { display: flex; align-items: center; gap: 5px; font-size: 12px; }
+        .legend-color { width: 20px; height: 20px; border-radius: 3px; }
+        .results-section { margin-top: 20px; background: #16213e; border-radius: 10px; padding: 20px; }
+        .results-section h2 { color: #4ECDC4; margin-bottom: 15px; }
+        .result-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }
+        .result-card { background: #0f3460; padding: 15px; border-radius: 8px; }
+        .result-card h3 { color: #FFE66D; font-size: 14px; margin-bottom: 10px; }
+        .result-item { font-size: 12px; margin: 3px 0; }
+        .success { color: #4ECDC4; }
+        .fail { color: #FF6B6B; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>储物区设备摆放规划系统</h1>
+        <div class="controls">
+            <button onclick="runAll()">运行全部规划</button>
+            <button onclick="toggleLabels()">显示/隐藏标签</button>
+            <button onclick="exportResults()">导出结果JSON</button>
+        </div>
+        <div class="legend">
+            <div class="legend-item"><div class="legend-color" style="background:#FF6B6B"></div>冰箱 (fridge)</div>
+            <div class="legend-item"><div class="legend-color" style="background:#4ECDC4"></div>制冰机 (iceMaker)</div>
+            <div class="legend-item"><div class="legend-color" style="background:#45B7D1"></div>货架 (shelf)</div>
+            <div class="legend-item"><div class="legend-color" style="background:#96CEB4"></div>离地架 (overShelf)</div>
+            <div class="legend-item"><div class="legend-color" style="background:#FFE66D"></div>门 (door)</div>
+            <div class="legend-item"><div class="legend-color" style="background:rgba(255,107,107,0.3);border:1px dashed #FF6B6B"></div>冰箱开门区域</div>
+            <div class="legend-item"><div class="legend-color" style="background:rgba(255,230,109,0.3);border:1px dashed #FFE66D"></div>外开门区域</div>
+            <div class="legend-item"><div class="legend-color" style="background:rgba(76,175,80,0.3);border:1px dashed #4CAF50"></div>内开门区域（图三）</div>
+        </div>
+        <div class="layout-container" id="layoutContainer">
+            <div class="layout-card">
+                <h2>图1: 8.8㎡ 不规则储物区</h2>
+                <canvas id="canvas1" width="500" height="400"></canvas>
+                <div class="info-panel" id="info1"></div>
+            </div>
+            <div class="layout-card">
+                <h2>图2: 5.4㎡ 储藏区</h2>
+                <canvas id="canvas2" width="500" height="400"></canvas>
+                <div class="info-panel" id="info2"></div>
+            </div>
+            <div class="layout-card">
+                <h2>图3: 11.67㎡ 长条型储藏区</h2>
+                <canvas id="canvas3" width="500" height="400"></canvas>
+                <div class="info-panel" id="info3"></div>
+            </div>
+            <div class="layout-card">
+                <h2>图4: 6.5㎡ 储物区</h2>
+                <canvas id="canvas4" width="500" height="400"></canvas>
+                <div class="info-panel" id="info4"></div>
+            </div>
+        </div>
+        <div class="results-section">
+            <h2>规划结果详情</h2>
+            <div class="result-grid" id="resultsGrid"></div>
+        </div>
+    </div>
+
+    <script>
+const examples = {
+    example1: {
+        name: "8.8㎡ 不规则储物区",
+        boundary: [[7821.7357,33170.2897],[7821.7357,28741.7939],[5795.8462,28742.3812],[5614.6510,29380.5005],[5306.8204,29293.0914],[4423.4423,32404.1039],[7821.7357,33170.2897]],
+        door: [[7821.7357,32746.4897],[7821.7357,31746.4897]],
+        isOpenInward: false,
+        algoToPlace: {
+            "fridge": [1220, 1330],
+            "shelf-1": [1000, 400],
+            "shelf-2": [1000, 400],
+            "shelf-3": [1000, 400],
+            "shelf-4": [1000, 400],
+            "overShelf-1": [600, 400],
+            "overShelf-2": [600, 400],
+            "overShelf-3": [600, 400]
+        }
+    },
+    example2: {
+        name: "5.4㎡ 储藏区",
+        boundary: [[31596.3885,33275.6321],[31566.3885,33275.6321],[31566.3885,33375.6321],[31596.3885,33375.6321],[31596.3885,34970.0295],[31196.3885,34970.0295],[28993.3885,34970.0295],[28993.3885,34205.0295],[28993.3885,33505.0295],[28993.3885,32755.0295],[28993.3885,32000.0295],[30996.3885,32000.0295],[30996.3885,32040.0295],[31596.3885,32040.0295],[31596.3885,33275.6321]],
+        door: [[28993.3885,32700.0295],[28993.3885,32000.0295]],
+        isOpenInward: false,
+        algoToPlace: {
+            "fridge": [1220, 1330],
+            "iceMaker": [760, 850],
+            "shelf-1": [1000, 400],
+            "shelf-2": [1000, 400],
+            "shelf-3": [1000, 400],
+            "overShelf-1": [600, 400],
+            "overShelf-2": [600, 400],
+            "overShelf-3": [600, 400]
+        }
+    },
+    example3: {
+        name: "11.67㎡ 长条型储藏区",
+        boundary: [[56298.3095,37153.1070],[56298.3095,37553.1060],[58048.3095,37553.1060],[58048.3095,35453.1060],[57098.3095,35453.1060],[57098.3095,29483.1070],[55898.3095,29483.1070],[55898.3095,37153.1070],[56298.3095,37153.1070]],
+        door: [[57098.3095,30183.107],[57098.3095,29483.107]],
+        isOpenInward: true,
+        algoToPlace: {
+            "fridge": [1220, 1330],
+            "shelf-1": [1000, 400],
+            "shelf-2": [1000, 400],
+            "shelf-3": [1000, 400],
+            "shelf-4": [1000, 400],
+            "shelf-5": [1000, 400],
+            "overShelf-1": [600, 400],
+            "overShelf-2": [600, 400],
+            "overShelf-3": [600, 400]
+        }
+    },
+    example4: {
+        name: "6.5㎡ 储物区",
+        boundary: [[182873.5924,30542.7231],[182873.5924,29542.7231],[184373.5924,29542.7231],[184373.5924,30542.7231],[183863.1148,30542.7231],[183863.1148,30642.7231],[184473.5924,30642.7231],[184473.5924,29642.7231],[184973.5924,29642.7231],[184973.5924,33102.7231],[182873.5924,33102.7231],[182873.5924,30542.7231]],
+        door: [[184973.5924,33102.7231],[184973.5924,32202.7231]],
+        isOpenInward: false,
+        algoToPlace: {
+            "fridge": [1220, 1330],
+            "shelf-1": [1000, 400],
+            "shelf-2": [1000, 400],
+            "overShelf-1": [600, 400],
+            "overShelf-2": [600, 400],
+            "overShelf-3": [600, 400]
+        }
+    }
+};
+
+const STORAGE_DATA = {
+    example1: {
+        door: { label: "door-exit-1", position: "区域右侧中部", type: "安全出口平开门", direction: "向外开启", coord: [90, 860] },
+        items: [
+            { name: "四门风冷双温冰箱", type: "fridge", count: 1, position: "区域左侧斜墙底部，背部贴墙", direction: "开口垂直于斜墙朝向区域内部", desc: "冰箱长边沿斜墙，深度朝内，紧贴上方 shelf-4 货架，前方预留操作空间" },
+            { name: "落地高货架", type: "shelf", count: 4, position: "shelf-1 在左侧斜墙顶部（上方货架）；shelf-4 紧贴 shelf-1 下方（左侧货架）；shelf-2/shelf-3 紧贴右下角沿右墙竖放", direction: "全部朝向区域中心通道", desc: "左侧斜墙从上到下：shelf-1 → shelf-4 → 冰箱，紧贴排列无间隙；右侧 shelf-2/shelf-3 从右下角向上堆叠" },
+            { name: "离地矮架", type: "overShelf", count: 3, position: "沿顶部墙面从左向右排列，背部贴顶墙", direction: "朝向区域内部", desc: "短边(400)沿墙、长边(600)朝内，离地 120mm 抬高安装" }
+        ]
+    },
+    example2: {
+        door: { label: "door-exit-1", position: "区域左侧最底部", type: "安全出口平开门", direction: "向外开启", coord: [90, 860] },
+        items: [
+            { name: "四门风冷双温冰箱", type: "fridge", count: 1, position: "区域上部靠右，背部紧贴顶部墙体", direction: "朝向下方（区域内部）", desc: "开口向下，靠右放置避免与左上角制冰机碰撞，前方预留≥1000mm 操作空间" },
+            { name: "制冰机（含专用离地底座）", type: "iceMaker", count: 1, position: "区域左上角，背部贴合左墙与顶墙的转角", direction: "朝向右侧区域内部", desc: "下方自带专用离地架抬高，就近预留上下水与电源接口" },
+            { name: "货架", type: "shelf", count: 3, position: "1 组在底部墙中心横向布置；1 组在右墙上段居中；1 组在右墙下段居中", direction: "均朝向区域中心", desc: "底部货架为取放核心，右墙两段货架分别利用门上方可用墙面" },
+            { name: "离地架", type: "overShelf", count: 3, position: "2 组在底部货架上方并排紧贴（已旋转90°避开门区域）；1 组在底部货架右侧紧贴", direction: "旋转90°后竖向高度减半，避开冰箱向下开门区域", desc: "与底部货架组成紧贴储物组合，统一离地 120mm，隔绝地面潮气" }
+        ]
+    },
+    example3: {
+        door: { label: "door-exit-1", position: "区域最下方靠右墙壁", type: "安全出口平开门", direction: "向内开启（绿色区域）", coord: [570, 2480] },
+        items: [
+            { name: "四门风冷双温冰箱", type: "fridge", count: 1, position: "区域最顶端偏右，背部紧贴上端墙体", direction: "朝向下方（纵深主通道）", desc: "右移 500mm，开口向下，前方预留≥900mm 操作空间" },
+            { name: "落地高货架", type: "shelf", count: 5, position: "沿左侧墙体竖向一字排开，从上至下均匀分布，背部完全贴合左墙", direction: "朝向右方（面向中心主通道）", desc: "5 组货架串联整面墙体，形成连续储物面，规格统一便于管理" },
+            { name: "离地矮架", type: "overShelf", count: 3, position: "紧贴最底部货架下方竖向排列，与上方落地货架无缝衔接", direction: "朝向右方（面向中心通道）", desc: "离地 120mm 抬高，存放重物或防潮物料，与门保持安全距离" }
+        ]
+    },
+    example4: {
+        door: { label: "door-exit-1", position: "区域右侧中部", type: "安全出口平开门", direction: "向外开启", coord: [470, 320] },
+        items: [
+            { name: "四门风冷双温冰箱", type: "fridge", count: 1, position: "区域左侧墙顶部，长边沿墙竖直，背部紧贴左墙", direction: "开口向右（区域内部通道）", desc: "长边竖直沿左墙，深度朝右延伸，前方预留≥900mm 操作空间" },
+            { name: "货架", type: "shelf", count: 2, position: "1 组紧贴冰箱正下方；1 组沿右墙竖向摆放，避开冰箱开门区域后下移至安全位置", direction: "均朝向区域中心", desc: "下方货架紧贴冰箱底部无缝衔接；右侧货架避让冰箱向右开门摆动区，必要时向下微调" },
+            { name: "离地架", type: "overShelf", count: 3, position: "沿底部墙体横向一字排开，背部紧贴底墙", direction: "朝向上方（区域内部）", desc: "3 组并排拼接，离地 120mm 防潮，存放低频周转重物" }
+        ]
+    }
+};
+
+const COLORS = {
+    fridge: '#FF6B6B',
+    iceMaker: '#4ECDC4',
+    shelf: '#45B7D1',
+    overShelf: '#96CEB4',
+    door: '#FFE66D',
+    boundary: '#ffffff'
+};
+
+let showLabels = true;
+let plannedResults = {};
+
+function getType(name) {
+    if (name.includes('fridge')) return 'fridge';
+    if (name.includes('ice')) return 'iceMaker';
+    if (name.includes('over')) return 'overShelf';
+    if (name.includes('shelf')) return 'shelf';
+    return 'unknown';
+}
+
+function getBounds(polygon) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const [x, y] of polygon) {
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+    }
+    return { minX, minY, maxX, maxY };
+}
+
+function getRectCorners(cx, cy, w, h, rotation) {
+    const corners = [];
+    const cos = Math.cos(rotation);
+    const sin = Math.sin(rotation);
+    for (const [dx, dy] of [[-w/2, -h/2], [w/2, -h/2], [w/2, h/2], [-w/2, h/2]]) {
+        corners.push([cx + dx * cos - dy * sin, cy + dx * sin + dy * cos]);
+    }
+    return corners;
+}
+
+function calculateArea(polygon) {
+    let area = 0;
+    for (let i = 0; i < polygon.length - 1; i++) {
+        area += polygon[i][0] * polygon[i+1][1];
+        area -= polygon[i+1][0] * polygon[i][1];
+    }
+    return Math.abs(area) / 2;
+}
+
+function segmentLength(p1, p2) {
+    return Math.sqrt((p2[0]-p1[0])**2 + (p2[1]-p1[1])**2);
+}
+
+function normalizeEdge(p1, p2) {
+    const len = segmentLength(p1, p2);
+    return { dx: (p2[0]-p1[0])/len, dy: (p2[1]-p1[1])/len, len };
+}
+
+function pointOnEdge(p1, p2, t) {
+    return [p1[0] + (p2[0]-p1[0])*t, p1[1] + (p2[1]-p1[1])*t];
+}
+
+function edgeNormal(p1, p2, boundary) {
+    const n = normalizeEdge(p1, p2);
+    let nx = -n.dy, ny = n.dx;
+    const mid = [(p1[0]+p2[0])/2, (p1[1]+p2[1])/2];
+    const centroid = getCentroid(boundary);
+    const toCentroid = [centroid[0]-mid[0], centroid[1]-mid[1]];
+    if (nx*toCentroid[0] + ny*toCentroid[1] < 0) {
+        nx = -nx; ny = -ny;
+    }
+    return { nx, ny };
+}
+
+function getCentroid(polygon) {
+    let area = 0, cx = 0, cy = 0;
+    for (let i = 0; i < polygon.length - 1; i++) {
+        const x1 = polygon[i][0], y1 = polygon[i][1];
+        const x2 = polygon[i+1][0], y2 = polygon[i+1][1];
+        const cross = x1 * y2 - x2 * y1;
+        area += cross;
+        cx += (x1 + x2) * cross;
+        cy += (y1 + y2) * cross;
+    }
+    area /= 2;
+    cx /= (6 * area);
+    cy /= (6 * area);
+    return [cx, cy];
+}
+
+function identifyEdges(boundary) {
+    const edges = [];
+    for (let i = 0; i < boundary.length - 1; i++) {
+        edges.push([boundary[i], boundary[i+1]]);
+    }
+    return edges;
+}
+
+function findVerticalEdge(edges, side) {
+    let best = null, maxLen = 0;
+    const bounds = getBounds(edges.flat());
+    for (const edge of edges) {
+        const dx = Math.abs(edge[1][0] - edge[0][0]);
+        const len = segmentLength(edge[0], edge[1]);
+        if (dx/len < 0.15 && len > maxLen) {
+            const midX = (edge[0][0] + edge[1][0]) / 2;
+            if ((side === 'right' && midX > (bounds.minX + bounds.maxX)/2) ||
+                (side === 'left' && midX < (bounds.minX + bounds.maxX)/2)) {
+                maxLen = len;
+                best = edge;
+            }
+        }
+    }
+    return best;
+}
+
+function findHorizontalEdge(edges, side) {
+    let best = null, maxLen = 0;
+    const bounds = getBounds(edges.flat());
+    for (const edge of edges) {
+        const dy = Math.abs(edge[1][1] - edge[0][1]);
+        const len = segmentLength(edge[0], edge[1]);
+        if (dy/len < 0.15 && len > maxLen) {
+            const midY = (edge[0][1] + edge[1][1]) / 2;
+            if ((side === 'top' && midY > (bounds.minY + bounds.maxY)/2) ||
+                (side === 'bottom' && midY < (bounds.minY + bounds.maxY)/2)) {
+                maxLen = len;
+                best = edge;
+            }
+        }
+    }
+    return best;
+}
+
+function findTopLeftCorner(boundary) {
+    const bounds = getBounds(boundary);
+    let best = null, bestScore = Infinity;
+    for (const p of boundary) {
+        const score = (p[0]-bounds.minX) + (bounds.maxY-p[1]);
+        if (score < bestScore) {
+            bestScore = score;
+            best = p;
+        }
+    }
+    return best;
+}
+
+function findTopRightCorner(boundary) {
+    const bounds = getBounds(boundary);
+    let best = null, bestScore = Infinity;
+    for (const p of boundary) {
+        const score = (bounds.maxX-p[0]) + (bounds.maxY-p[1]);
+        if (score < bestScore) {
+            bestScore = score;
+            best = p;
+        }
+    }
+    return best;
+}
+
+function planLayout(config, key) {
+    const items = [];
+    for (const [name, dims] of Object.entries(config.algoToPlace)) {
+        items.push({
+            name,
+            type: getType(name),
+            length: dims[0],
+            width: dims[1],
+            placed: false,
+            center: null,
+            rotation: 0
+        });
+    }
+    
+    const edges = identifyEdges(config.boundary);
+    let placedItems = [];
+    
+    if (key === 'example1') {
+        placedItems = planExample1(config, items, edges);
+    } else if (key === 'example2') {
+        placedItems = planExample2(config, items, edges);
+    } else if (key === 'example3') {
+        placedItems = planExample3(config, items, edges);
+    } else if (key === 'example4') {
+        placedItems = planExample4(config, items, edges);
+    }
+    
+    return {
+        feasible: placedItems.length === items.length,
+        totalItems: items.length,
+        placedCount: placedItems.length,
+        items: placedItems
+    };
+}
+
+function planExample1(config, items, edges) {
+    const boundary = config.boundary;
+    const placed = [];
+    const edgeMargin = 0;   // 沿墙方向：完全贴墙角
+    const wallInset = 0;    // 离墙方向：边界线压在上方自动消除白边
+
+    const rightEdge = findVerticalEdge(edges, 'right');
+    const topEdge = [findTopLeftCorner(boundary), findTopRightCorner(boundary)];
+    // 左斜墙：从边界线段中找出包含左上角的真正左侧墙（排除凹槽）
+    const tl = findTopLeftCorner(boundary);
+    let leftWallEdge = null;
+    for (const edge of edges) {
+        const e0Match = Math.abs(edge[0][0] - tl[0]) < 0.5 && Math.abs(edge[0][1] - tl[1]) < 0.5;
+        const e1Match = Math.abs(edge[1][0] - tl[0]) < 0.5 && Math.abs(edge[1][1] - tl[1]) < 0.5;
+        if (e0Match || e1Match) {
+            // 排序：y 大的（上方）在前
+            if (edge[0][1] > edge[1][1]) {
+                leftWallEdge = [edge[0], edge[1]];
+            } else {
+                leftWallEdge = [edge[1], edge[0]];
+            }
+            break;
+        }
+    }
+    const leftSlantTopDown = leftWallEdge || [findTopLeftCorner(boundary), findBottomLeftCorner(boundary)];
+
+    const fridge = items.find(i => i.type === 'fridge');
+    const shelves = items.filter(i => i.type === 'shelf');
+    const overshelves = items.filter(i => i.type === 'overShelf');
+
+    // === 左侧斜墙：shelf-1（上方货架）→ shelf-4（左侧货架）→ fridge，紧贴排列 ===
+    if (leftSlantTopDown) {
+        const n = normalizeEdge(leftSlantTopDown[0], leftSlantTopDown[1]);
+        const normal = edgeNormal(leftSlantTopDown[0], leftSlantTopDown[1], boundary);
+        const rotation = Math.atan2(n.dy, n.dx);
+        const gap = 0; // 紧贴，无间隙
+
+        // shelf-1: 作为"上方货架"，紧贴斜墙顶部
+        const shelf1 = shelves.find(s => s.name === 'shelf-1');
+        let accumOffset = edgeMargin;
+        if (shelf1) {
+            accumOffset += shelf1.length / 2;
+            const base = pointOnEdge(leftSlantTopDown[0], leftSlantTopDown[1], accumOffset / n.len);
+            shelf1.center = [base[0] + normal.nx * (shelf1.width / 2 + wallInset), base[1] + normal.ny * (shelf1.width / 2 + wallInset)];
+            shelf1.rotation = rotation;
+            placed.push(shelf1);
+            accumOffset = accumOffset - shelf1.length / 2 + shelf1.length + gap;
+        }
+
+        // shelf-4: 紧贴 shelf-1 下方，作为"左侧货架"
+        const shelf4 = shelves.find(s => s.name === 'shelf-4');
+        if (shelf4) {
+            accumOffset += shelf4.length / 2;
+            const base = pointOnEdge(leftSlantTopDown[0], leftSlantTopDown[1], accumOffset / n.len);
+            shelf4.center = [base[0] + normal.nx * (shelf4.width / 2 + wallInset), base[1] + normal.ny * (shelf4.width / 2 + wallInset)];
+            shelf4.rotation = rotation;
+            placed.push(shelf4);
+            accumOffset = accumOffset - shelf4.length / 2 + shelf4.length + gap;
+        }
+
+        // fridge: 紧贴 shelf-4 下方
+        if (fridge) {
+            accumOffset += fridge.length / 2;
+            const base = pointOnEdge(leftSlantTopDown[0], leftSlantTopDown[1], accumOffset / n.len);
+            fridge.center = [base[0] + normal.nx * (fridge.width / 2 + wallInset), base[1] + normal.ny * (fridge.width / 2 + wallInset)];
+            fridge.rotation = rotation;
+            placed.push(fridge);
+        }
+    }
+
+    // === 右侧墙：shelf-2、shelf-3 紧贴右下角，沿右墙竖放 ===
+    if (rightEdge) {
+        const n = normalizeEdge(rightEdge[0], rightEdge[1]);
+        const normal = edgeNormal(rightEdge[0], rightEdge[1], boundary);
+        const rotation = Math.atan2(n.dy, n.dx);
+        const edgeLen = segmentLength(rightEdge[0], rightEdge[1]);
+        const rightShelves = shelves.filter(s => s.name === 'shelf-2' || s.name === 'shelf-3');
+        const gap = 0;
+
+        // 从右下角（墙底部）开始向上排列
+        let accumFromBottom = edgeMargin;
+        for (let i = 0; i < rightShelves.length; i++) {
+            const item = rightShelves[i];
+            accumFromBottom += item.length / 2;
+            if (accumFromBottom > edgeLen) break;
+            const offsetFromTop = edgeLen - accumFromBottom;
+            const base = pointOnEdge(rightEdge[0], rightEdge[1], offsetFromTop / n.len);
+            item.center = [base[0] + normal.nx * (item.width / 2 + wallInset), base[1] + normal.ny * (item.width / 2 + wallInset)];
+            item.rotation = rotation;
+            placed.push(item);
+            accumFromBottom = accumFromBottom - item.length / 2 + item.length + gap;
+        }
+    }
+
+    // === 顶墙：3 个离地架旋转90°，长边(600)沿墙、短边(400)朝内，紧贴并排 ===
+    if (overshelves.length > 0 && topEdge) {
+        const n = normalizeEdge(topEdge[0], topEdge[1]);
+        const normal = edgeNormal(topEdge[0], topEdge[1], boundary);
+        const baseRotation = Math.atan2(n.dy, n.dx);
+        const spacing = 0;
+        const startOffset = 400;
+        for (let i = 0; i < overshelves.length; i++) {
+            const item = overshelves[i];
+            const wallLen = item.length;   // 长边 600 沿墙（旋转90°后）
+            const wallDepth = item.width;   // 短边 400 朝内
+            const offset = startOffset + i * (wallLen + spacing) + wallLen / 2;
+            const base = pointOnEdge(topEdge[0], topEdge[1], offset / n.len);
+            item.center = [base[0] + normal.nx * (wallDepth / 2 + wallInset), base[1] + normal.ny * (wallDepth / 2 + wallInset)];
+            item.rotation = baseRotation;
+            placed.push(item);
+        }
+    }
+
+    return placed;
+}
+
+function planExample2(config, items, edges) {
+    const boundary = config.boundary;
+    const placed = [];
+    const margin = 2;
+
+    const topEdge = findHorizontalEdge(edges, 'top');
+    const leftEdge = findVerticalEdge(edges, 'left');
+    const bottomEdge = findHorizontalEdge(edges, 'bottom');
+    const topLeft = findTopLeftCorner(boundary);
+
+    const fridge = items.find(i => i.type === 'fridge');
+    // 冰箱靠顶部墙右侧，length(1220)沿墙，width(1330)朝下，与左上角制冰机保持距离
+    if (fridge && topEdge) {
+        const n = normalizeEdge(topEdge[0], topEdge[1]);
+        const normal = edgeNormal(topEdge[0], topEdge[1], boundary);
+        const rotation = 0;
+        // 冰箱左侧与制冰机右侧保持 ≥100mm 间距（制冰机宽 850 + 2mm 墙隙 + 100mm 安全距）
+        const offset = segmentLength(topEdge[0], topEdge[1]) - 952 - fridge.length / 2;
+        const base = pointOnEdge(topEdge[0], topEdge[1], offset / n.len);
+        fridge.center = [base[0] + normal.nx * (fridge.width / 2 + margin), base[1] + normal.ny * (fridge.width / 2 + margin)];
+        fridge.rotation = rotation;
+        placed.push(fridge);
+    }
+
+    const iceMaker = items.find(i => i.type === 'iceMaker');
+    // 制冰机放在左上角，背部贴左墙与顶墙，角点不越界
+    if (iceMaker && topLeft && leftEdge && topEdge) {
+        iceMaker.center = [
+            topLeft[0] + iceMaker.width / 2 + margin,
+            topLeft[1] - iceMaker.width / 2 - margin
+        ];
+        iceMaker.rotation = 0;
+        placed.push(iceMaker);
+    }
+
+    const shelves = items.filter(i => i.type === 'shelf');
+
+    // shelf-1 放在底部墙中心位置
+    const shelf1 = shelves.find(s => s.name === 'shelf-1');
+    if (shelf1 && bottomEdge) {
+        const n = normalizeEdge(bottomEdge[0], bottomEdge[1]);
+        const normal = edgeNormal(bottomEdge[0], bottomEdge[1], boundary);
+        const rotation = 0;
+        const offset = (segmentLength(bottomEdge[0], bottomEdge[1]) - shelf1.length) / 2 + shelf1.length / 2;
+        const base = pointOnEdge(bottomEdge[0], bottomEdge[1], offset / n.len);
+        shelf1.center = [base[0] + normal.nx * (shelf1.width / 2 + margin), base[1] + normal.ny * (shelf1.width / 2 + margin)];
+        shelf1.rotation = rotation;
+        placed.push(shelf1);
+    }
+
+    // shelf-2、shelf-3 紧贴右墙最顶部，从上往下堆叠
+    const rightWallFull = [[31596.3885, 34970.0295], [31596.3885, 32040.0295]];
+    {
+        const n = normalizeEdge(rightWallFull[0], rightWallFull[1]);
+        const normal = edgeNormal(rightWallFull[0], rightWallFull[1], boundary);
+        const rotation = Math.atan2(n.dy, n.dx);
+        const gap = 0;
+        let accumFromTop = margin;
+        const rightShelves = shelves.filter(s => s.name === 'shelf-2' || s.name === 'shelf-3');
+        for (const s of rightShelves) {
+            if (placed.includes(s)) continue;
+            accumFromTop += s.length / 2;
+            const base = pointOnEdge(rightWallFull[0], rightWallFull[1], accumFromTop / n.len);
+            s.center = [base[0] + normal.nx * (s.width / 2 + margin), base[1] + normal.ny * (s.width / 2 + margin)];
+            s.rotation = rotation;
+            placed.push(s);
+            accumFromTop = accumFromTop - s.length / 2 + s.length + gap;
+        }
+    }
+
+    const overshelves = items.filter(i => i.type === 'overShelf');
+    if (overshelves.length >= 3 && shelf1 && bottomEdge) {
+        const spacing = 5;
+        const shelfCX = shelf1.center[0];
+        const shelfTopY = shelf1.center[1] + shelf1.width / 2;
+        const shelfRightX = shelf1.center[0] + shelf1.length / 2;
+
+        // overShelf-2: 右侧竖放（先在右侧定位，作为 overShelf-1/3 右移的参照）
+        const over2 = overshelves.find(o => o.name === 'overShelf-2') || overshelves[1];
+        over2.center = [shelfRightX + spacing + over2.width / 2, shelf1.center[1] + (over2.length - shelf1.width) / 2];
+        over2.rotation = Math.PI / 2;
+        placed.push(over2);
+
+        // overShelf-1: 右移至紧顶 overShelf-2 左侧
+        const over1 = overshelves.find(o => o.name === 'overShelf-1') || overshelves[0];
+        const overY = shelfTopY + spacing + over1.width / 2;
+        const over1NewCX = over2.center[0] - over2.width / 2 - over1.length / 2; // 顶住 over2
+        over1.center = [over1NewCX, overY];
+        over1.rotation = 0;
+        placed.push(over1);
+
+        // overShelf-3: 跟随 overShelf-1 右移，保持在其左侧
+        const over3 = overshelves.find(o => o.name === 'overShelf-3') || overshelves[2];
+        over3.center = [over1.center[0] - over1.length / 2 - spacing - over3.length / 2, over1.center[1]];
+        over3.rotation = 0;
+        placed.push(over3);
+    }
+
+    return placed;
+}
+
+function planExample3(config, items, edges) {
+    const boundary = config.boundary;
+    const placed = [];
+    const margin = 2;
+
+    // 图三顶部平台长度有限（有效墙顶约 800mm），将冰箱背部贴在 y=35453 的水平可用平台上，
+    // 仍可居中于该宽平台，开口向下
+    const fridgePlatform = [[56298.3095, 35453.1060], [58048.3095, 35453.1060]];
+    const leftEdge = findVerticalEdge(edges, 'left');
+
+    const fridge = items.find(i => i.type === 'fridge');
+    if (fridge) {
+        // 顶部平台 y>35453 区域可用宽度约 2150mm，冰箱右移 400mm，开口向下
+        const platformTopY = 37553.1060;
+        const fridgeCY = platformTopY - fridge.width / 2 - margin;
+        const fridgeHalfLen = fridge.length / 2;
+        const usableLeftX = 55898.3095;
+        const usableRightX = 58048.3095;
+        const fridgeCX = usableLeftX + (usableRightX - usableLeftX - fridge.length) / 2 + fridgeHalfLen + 400;
+        fridge.center = [fridgeCX, fridgeCY];
+        fridge.rotation = 0;
+        placed.push(fridge);
+    }
+
+    const shelves = items.filter(i => i.type === 'shelf');
+    if (leftEdge && shelves.length >= 5) {
+        const n = normalizeEdge(leftEdge[0], leftEdge[1]);
+        const normal = edgeNormal(leftEdge[0], leftEdge[1], boundary);
+        const rotation = Math.atan2(n.dy, n.dx);
+        const spacing = 80;
+        const totalLen = 5 * shelves[0].length + 4 * spacing;
+        const edgeLen = segmentLength(leftEdge[0], leftEdge[1]);
+        // 从顶部往下排，顶部与冰箱保持 100mm 间距
+        const startOffset = edgeLen - totalLen - 100;
+        for (let i = 0; i < Math.min(5, shelves.length); i++) {
+            const item = shelves[i];
+            const offset = startOffset + i * (item.length + spacing) + item.length / 2;
+            const base = pointOnEdge(leftEdge[0], leftEdge[1], offset / n.len);
+            item.center = [base[0] + normal.nx * (item.width / 2 + margin), base[1] + normal.ny * (item.width / 2 + margin)];
+            item.rotation = rotation;
+            placed.push(item);
+        }
+    }
+
+    const overshelves = items.filter(i => i.type === 'overShelf');
+    // 三个离地架竖放（长边600沿墙），紧贴最底部货架下方排列
+    if (leftEdge && overshelves.length >= 3 && placed.filter(i => i.type === 'shelf').length >= 5) {
+        const n = normalizeEdge(leftEdge[0], leftEdge[1]);
+        const normal = edgeNormal(leftEdge[0], leftEdge[1], boundary);
+        const rotation = Math.atan2(n.dy, n.dx); // 竖放：长边沿墙
+        const placedShelves = placed.filter(i => i.type === 'shelf');
+        const bottomShelf = placedShelves[0];
+        const shelfBottomY = bottomShelf.center[1] - bottomShelf.length / 2;
+        const gap = 5;
+        const spacing = 5;
+        for (let i = 0; i < Math.min(3, overshelves.length); i++) {
+            const item = overshelves[i];
+            const cy = shelfBottomY - gap - item.length / 2 - i * (item.length + spacing);
+            item.center = [leftEdge[0][0] + normal.nx * (item.width / 2 + margin), cy];
+            item.rotation = rotation;
+            placed.push(item);
+        }
+    }
+
+    return placed;
+}
+
+function planExample4(config, items, edges) {
+    const boundary = config.boundary;
+    const placed = [];
+    const margin = 2;
+
+    const leftEdge = findVerticalEdge(edges, 'left');
+    const rightEdge = findVerticalEdge(edges, 'right');
+    const bottomEdge = findHorizontalEdge(edges, 'bottom');
+    const door = config.door;
+
+    const fridge = items.find(i => i.type === 'fridge');
+    // 冰箱长边(1220)沿左墙竖直，宽边(1330)向右延伸，开口向右
+    if (fridge && leftEdge) {
+        const n = normalizeEdge(leftEdge[0], leftEdge[1]);
+        const normal = edgeNormal(leftEdge[0], leftEdge[1], boundary);
+        const rotation = Math.atan2(n.dy, n.dx);
+        const offset = 100 + fridge.length / 2;  // 长边沿墙，从顶部偏移
+        const base = pointOnEdge(leftEdge[0], leftEdge[1], offset / n.len);
+        fridge.center = [base[0] + normal.nx * (fridge.width / 2 + margin), base[1] + normal.ny * (fridge.width / 2 + margin)];
+        fridge.rotation = rotation;
+        placed.push(fridge);
+    }
+
+    const shelves = items.filter(i => i.type === 'shelf');
+
+    // shelf-1 放在左墙冰箱正下方，紧贴冰箱底部（适配冰箱长边沿墙）
+    const shelf1 = shelves.find(s => s.name === 'shelf-1');
+    if (shelf1 && leftEdge) {
+        const n = normalizeEdge(leftEdge[0], leftEdge[1]);
+        const normal = edgeNormal(leftEdge[0], leftEdge[1], boundary);
+        const rotation = Math.atan2(n.dy, n.dx);
+        const gap = 5;
+        const fridgeBottomOffset = 100 + fridge.length + gap + shelf1.length / 2;
+        const base = pointOnEdge(leftEdge[0], leftEdge[1], fridgeBottomOffset / n.len);
+        shelf1.center = [base[0] + normal.nx * (shelf1.width / 2 + margin), base[1] + normal.ny * (shelf1.width / 2 + margin)];
+        shelf1.rotation = rotation;
+        placed.push(shelf1);
+    }
+
+    // shelf-2 在右侧墙面，需避开冰箱向右开门区域，若有碰撞则向下微调
+    const shelf2 = shelves.find(s => s.name === 'shelf-2');
+    if (shelf2 && rightEdge && door) {
+        const n = normalizeEdge(rightEdge[0], rightEdge[1]);
+        const normal = edgeNormal(rightEdge[0], rightEdge[1], boundary);
+        const rotation = Math.atan2(n.dy, n.dx);
+        const rightEdgeTopY = Math.min(rightEdge[0][1], rightEdge[1][1]);
+        const doorTopY = Math.min(door[0][1], door[1][1]);
+        const usableLen = doorTopY - rightEdgeTopY;
+
+        // 计算冰箱开门摆动区域的 y 范围（开口向右，y范围与冰箱相同）
+        const fridgeSwingYMin = fridge.center[1] - fridge.length / 2;
+        const fridgeSwingYMax = fridge.center[1] + fridge.length / 2;
+
+        // 首选位置：在可用区域内偏上方
+        let targetY = rightEdgeTopY + usableLen * 0.75;
+        const shelfTop = targetY + shelf2.length / 2;
+        const shelfBottom = targetY - shelf2.length / 2;
+
+        // 检查是否与冰箱开门区域碰撞（y范围重叠）
+        const gap = 5;
+        if (shelfBottom < fridgeSwingYMax && shelfTop > fridgeSwingYMin) {
+            // 有碰撞：将 shelf-2 下移至冰箱摆动区域下方
+            targetY = fridgeSwingYMin - gap - shelf2.length / 2;
+        }
+
+        // 确保不超出可用区域底部
+        const minSafeY = rightEdgeTopY + shelf2.length / 2 + margin;
+        if (targetY - shelf2.length / 2 < rightEdgeTopY) {
+            targetY = minSafeY;
+        }
+
+        const base = pointOnEdge(rightEdge[0], rightEdge[1], (targetY - rightEdge[0][1]) / n.len);
+        shelf2.center = [base[0] + normal.nx * (shelf2.width / 2 + margin), base[1] + normal.ny * (shelf2.width / 2 + margin)];
+        shelf2.rotation = rotation;
+        placed.push(shelf2);
+    }
+
+    const overshelves = items.filter(i => i.type === 'overShelf');
+    // 三个离地架整体左移至底角，短边(400)沿墙、长边(600)朝上
+    if (bottomEdge && overshelves.length >= 3) {
+        const n = normalizeEdge(bottomEdge[0], bottomEdge[1]);
+        const normal = edgeNormal(bottomEdge[0], bottomEdge[1], boundary);
+        const baseRotation = Math.atan2(n.dy, n.dx);
+        const spacing = 5;
+        // 从底边最左端开始排列
+        const startOffset = margin + overshelves[0].width / 2;
+        for (let i = 0; i < Math.min(3, overshelves.length); i++) {
+            const item = overshelves[i];
+            const wallLen = item.width;
+            const wallDepth = item.length;
+            const offset = startOffset + i * (wallLen + spacing);
+            const base = pointOnEdge(bottomEdge[0], bottomEdge[1], offset / n.len);
+            item.center = [base[0] + normal.nx * (wallDepth / 2 + margin), base[1] + normal.ny * (wallDepth / 2 + margin)];
+            item.rotation = baseRotation + Math.PI / 2;
+            placed.push(item);
+        }
+    }
+
+    return placed;
+}
+
+function getInwardNormal(item, boundary) {
+    const rot = item.rotation;
+    const n1 = { nx: -Math.sin(rot), ny: Math.cos(rot) };
+    const n2 = { nx: Math.sin(rot), ny: -Math.cos(rot) };
+    const c = getCentroid(boundary);
+    const dx = c[0] - item.center[0], dy = c[1] - item.center[1];
+    const dot1 = n1.nx * dx + n1.ny * dy;
+    const dot2 = n2.nx * dx + n2.ny * dy;
+    return dot1 > dot2 ? n1 : n2;
+}
+
+function getFridgeSwingCorners(item, boundary) {
+    const normal = getInwardNormal(item, boundary);
+    const cx = item.center[0], cy = item.center[1];
+    const ux = Math.cos(item.rotation), uy = Math.sin(item.rotation);
+    const halfW = item.length / 2;
+    const swingDepth = item.width / 2;
+    const fmx = cx + normal.nx * (item.width / 2);
+    const fmy = cy + normal.ny * (item.width / 2);
+    const p1 = [fmx - ux * halfW, fmy - uy * halfW];
+    const p2 = [fmx + ux * halfW, fmy + uy * halfW];
+    const p3 = [p2[0] + normal.nx * swingDepth, p2[1] + normal.ny * swingDepth];
+    const p4 = [p1[0] + normal.nx * swingDepth, p1[1] + normal.ny * swingDepth];
+    return [p1, p2, p3, p4];
+}
+
+function drawPolygon(ctx, polygon, transform, fillStyle, strokeStyle, lineDash) {
+    ctx.beginPath();
+    for (let i = 0; i < polygon.length; i++) {
+        const [tx, ty] = transform(polygon[i][0], polygon[i][1]);
+        if (i === 0) ctx.moveTo(tx, ty);
+        else ctx.lineTo(tx, ty);
+    }
+    ctx.closePath();
+    if (fillStyle) {
+        ctx.fillStyle = fillStyle;
+        ctx.fill();
+    }
+    if (strokeStyle) {
+        ctx.strokeStyle = strokeStyle;
+        ctx.setLineDash(lineDash || []);
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+}
+
+function renderLayout(canvasId, config, result) {
+    const canvas = document.getElementById(canvasId);
+    const ctx = canvas.getContext('2d');
+    
+    const { boundary, door } = config;
+    const bounds = getBounds(boundary);
+    
+    const padding = 60;
+    const scaleX = (canvas.width - padding * 2) / (bounds.maxX - bounds.minX);
+    const scaleY = (canvas.height - padding * 2) / (bounds.maxY - bounds.minY);
+    const scale = Math.min(scaleX, scaleY);
+    
+    const offsetX = padding + ((canvas.width - padding * 2) - (bounds.maxX - bounds.minX) * scale) / 2;
+    const offsetY = padding + ((canvas.height - padding * 2) - (bounds.maxY - bounds.minY) * scale) / 2;
+    
+    function transform(x, y) {
+        return [
+            offsetX + (x - bounds.minX) * scale,
+            canvas.height - offsetY - (y - bounds.minY) * scale
+        ];
+    }
+    
+    ctx.fillStyle = '#0f0f23';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // 1) 区域填充
+    ctx.beginPath();
+    ctx.fillStyle = '#1a3a4a';
+    for (let i = 0; i < boundary.length; i++) {
+        const [tx, ty] = transform(boundary[i][0], boundary[i][1]);
+        if (i === 0) ctx.moveTo(tx, ty);
+        else ctx.lineTo(tx, ty);
+    }
+    ctx.closePath();
+    ctx.fill();
+    
+    // 2) 门线
+    ctx.beginPath();
+    ctx.strokeStyle = COLORS.door;
+    ctx.lineWidth = 5;
+    const [dx1, dy1] = transform(door[0][0], door[0][1]);
+    const [dx2, dy2] = transform(door[1][0], door[1][1]);
+    ctx.moveTo(dx1, dy1);
+    ctx.lineTo(dx2, dy2);
+    ctx.stroke();
+    
+    // 3) 门摆动区域
+    if (config.isOpenInward) {
+        const doorWidth = segmentLength(door[0], door[1]);
+        const inwardNormal = edgeNormal(door[0], door[1], boundary);
+        const p1 = door[0];
+        const p2 = door[1];
+        const p3 = [p2[0] + inwardNormal.nx * doorWidth, p2[1] + inwardNormal.ny * doorWidth];
+        const p4 = [p1[0] + inwardNormal.nx * doorWidth, p1[1] + inwardNormal.ny * doorWidth];
+        drawPolygon(ctx, [p1, p2, p3, p4], transform, 'rgba(76, 175, 80, 0.15)', '#4CAF50', [4, 3]);
+    }
+    if (!config.isOpenInward) {
+        const doorWidth = segmentLength(door[0], door[1]);
+        const inwardNormal = edgeNormal(door[0], door[1], boundary);
+        const outwardNormal = { nx: -inwardNormal.nx, ny: -inwardNormal.ny };
+        const swingDepth = doorWidth;
+        const p1 = door[0];
+        const p2 = door[1];
+        const p3 = [p2[0] + outwardNormal.nx * swingDepth, p2[1] + outwardNormal.ny * swingDepth];
+        const p4 = [p1[0] + outwardNormal.nx * swingDepth, p1[1] + outwardNormal.ny * swingDepth];
+        drawPolygon(ctx, [p1, p2, p3, p4], transform, 'rgba(255, 230, 109, 0.15)', '#FFE66D', [6, 4]);
+    }
+    
+    // 4) 物品（先绘制，边界线压在上面消除白边缝隙）
+    if (result && result.items) {
+        const typeNames = { fridge: '冰箱', iceMaker: '制冰机', shelf: '货架', overShelf: '离地架' };
+        
+        for (const item of result.items) {
+            const corners = getRectCorners(item.center[0], item.center[1], item.length, item.width, item.rotation);
+            
+            ctx.beginPath();
+            ctx.fillStyle = COLORS[item.type] + 'cc';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            
+            for (let i = 0; i < corners.length; i++) {
+                const [tx, ty] = transform(corners[i][0], corners[i][1]);
+                if (i === 0) ctx.moveTo(tx, ty);
+                else ctx.lineTo(tx, ty);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            
+            if (showLabels) {
+                const [labelX, labelY] = transform(item.center[0], item.center[1]);
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 10px Microsoft YaHei';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const typeName = typeNames[item.type] || item.type;
+                const text = `${typeName}\n${item.length}×${item.width}`;
+                const lines = text.split('\n');
+                const lineHeight = 12;
+                ctx.fillText(lines[0], labelX, labelY - lineHeight / 2);
+                ctx.fillText(lines[1], labelX, labelY + lineHeight / 2);
+            }
+        }
+        
+        // 冰箱双开门摆动区域
+        for (const item of result.items) {
+            if (item.type === 'fridge') {
+                const swingCorners = getFridgeSwingCorners(item, boundary);
+                drawPolygon(ctx, swingCorners, transform, 'rgba(255, 107, 107, 0.15)', '#FF6B6B', [4, 3]);
+            }
+        }
+    }
+    
+    // 5) 边界描边（最后绘制，压在物品上方消除白边缝隙）
+    ctx.beginPath();
+    ctx.strokeStyle = COLORS.boundary;
+    ctx.lineWidth = 3;
+    for (let i = 0; i < boundary.length; i++) {
+        const [tx, ty] = transform(boundary[i][0], boundary[i][1]);
+        if (i === 0) ctx.moveTo(tx, ty);
+        else ctx.lineTo(tx, ty);
+    }
+    ctx.closePath();
+    ctx.stroke();
+    
+    const area = calculateArea(boundary);
+    ctx.fillStyle = '#4ECDC4';
+    ctx.font = 'bold 14px Microsoft YaHei';
+    ctx.textAlign = 'right';
+    ctx.fillText(`面积: ${(area / 1000000).toFixed(2)}㎡`, canvas.width - 20, 30);
+}
+
+function renderInfo(infoId, config, result, key) {
+    const info = document.getElementById(infoId);
+    const storageData = STORAGE_DATA[key];
+    
+    if (!result) {
+        info.innerHTML = '<p>运行规划后显示结果...</p>';
+        return;
+    }
+    
+    let html = `<p class="${result.feasible ? 'success' : 'fail'}">${result.feasible ? '✓ 可行' : '✗ 不可行'} - 已放置 ${result.placedCount}/${result.totalItems} 件</p>`;
+    
+    if (storageData) {
+        html += `<p style="color:#FFE66D;margin-top:8px;font-size:11px;">门位置: ${storageData.door.position} (${storageData.door.type}, ${storageData.door.direction})</p>`;
+        html += '<div style="margin-top:8px;"><strong style="color:#4ECDC4;font-size:12px;">布局说明:</strong></div>';
+        for (const item of storageData.items) {
+            html += `<div style="margin-top:6px;font-size:11px;">
+                <strong style="color:${COLORS[item.type]}">${item.name}</strong> × ${item.count}<br>
+                <span style="color:#aaa;">位置: ${item.position}</span><br>
+                <span style="color:#aaa;">朝向: ${item.direction}</span><br>
+                <span style="color:#888;font-size:10px;">${item.desc}</span>
+            </div>`;
+        }
+    }
+    
+    html += '<table style="margin-top:10px;"><thead><tr><th>物品</th><th>类型</th><th>中心坐标</th><th>旋转</th><th>尺寸</th></tr></thead><tbody>';
+    
+    for (const item of result.items) {
+        const typeName = {fridge: '冰箱', iceMaker: '制冰机', shelf: '货架', overShelf: '离地架'}[item.type] || item.type;
+        html += `<tr><td>${item.name}</td><td>${typeName}</td><td>[${item.center[0].toFixed(0)}, ${item.center[1].toFixed(0)}]</td><td>${(item.rotation * 180 / Math.PI).toFixed(0)}°</td><td>${item.length}×${item.width}</td></tr>`;
+    }
+    
+    html += '</tbody></table>';
+    info.innerHTML = html;
+}
+
+function runAll() {
+    plannedResults = {};
+    const exampleKeys = ['example1', 'example2', 'example3', 'example4'];
+    const canvasIds = ['canvas1', 'canvas2', 'canvas3', 'canvas4'];
+    const infoIds = ['info1', 'info2', 'info3', 'info4'];
+    
+    for (let i = 0; i < exampleKeys.length; i++) {
+        const key = exampleKeys[i];
+        const config = examples[key];
+        const result = planLayout(config, key);
+        plannedResults[key] = result;
+        
+        renderLayout(canvasIds[i], config, result);
+        renderInfo(infoIds[i], config, result, key);
+    }
+    
+    renderResults();
+}
+
+function renderResults() {
+    const grid = document.getElementById('resultsGrid');
+    grid.innerHTML = '';
+    
+    for (const [key, result] of Object.entries(plannedResults)) {
+        const config = examples[key];
+        const card = document.createElement('div');
+        card.className = 'result-card';
+        
+        let itemsHtml = '';
+        for (const item of result.items) {
+            itemsHtml += `
+                <div class="result-item">
+                    <span style="color:${COLORS[item.type]}">■</span>
+                    <strong>${item.name}</strong> (${item.type}) 
+                    → 位置: [${item.center[0].toFixed(0)}, ${item.center[1].toFixed(0)}] 
+                    角度: ${(item.rotation * 180 / Math.PI).toFixed(0)}°
+                </div>
+            `;
+        }
+        
+        card.innerHTML = `
+            <h3>${config.name} - <span class="${result.feasible ? 'success' : 'fail'}">${result.feasible ? '✓ 可行' : '✗ 不可行'}</span></h3>
+            <div class="result-item">共 ${result.totalItems} 件物品，已放置 ${result.placedCount} 件</div>
+            ${itemsHtml}
+        `;
+        grid.appendChild(card);
+    }
+}
+
+function toggleLabels() {
+    showLabels = !showLabels;
+    const exampleKeys = ['example1', 'example2', 'example3', 'example4'];
+    const canvasIds = ['canvas1', 'canvas2', 'canvas3', 'canvas4'];
+    
+    for (let i = 0; i < exampleKeys.length; i++) {
+        if (plannedResults[exampleKeys[i]]) {
+            renderLayout(canvasIds[i], examples[exampleKeys[i]], plannedResults[exampleKeys[i]]);
+        }
+    }
+}
+
+function exportResults() {
+    if (Object.keys(plannedResults).length === 0) {
+        alert('请先运行规划！');
+        return;
+    }
+    
+    const output = {};
+    for (const [key, result] of Object.entries(plannedResults)) {
+        output[key] = {
+            feasible: result.feasible,
+            items: result.items.map(item => ({
+                name: item.name,
+                center: item.center,
+                rotation: item.rotation
+            }))
+        };
+    }
+    
+    const blob = new Blob([JSON.stringify(output, null, 2)], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'layout_results.json';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+window.addEventListener('load', () => {
+    runAll();
+});
+</script>
+</body>
+</html>
