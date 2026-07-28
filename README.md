@@ -121,7 +121,21 @@ python -m http.server 8080
 
 ### 运行界面截图
 
-![运行界面](screenshot.png)
+#### 图1：8.8㎡ 不规则储物区
+
+![图1 布局](screenshot_01.png)
+
+#### 图2：5.4㎡ 储藏区
+
+![图2 布局](screenshot_02.png)
+
+#### 图3：11.67㎡ 长条型储藏区
+
+![图3 布局](screenshot_03.png)
+
+#### 图4：6.5㎡ 储物区
+
+![图4 布局](screenshot_04.png)
 
 ### 输出 JSON 示例（图一）
 
